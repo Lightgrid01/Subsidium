@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-// Live market panel powered by the public dreamDEX HTTP API.
+// dreamDEX markets, powered by the public dreamDEX HTTP API.
 // Endpoints used: GET /v0/markets and GET /v0/markets/{symbol}/tickers
+// Closed by default as a small corner button, so it never covers the dashboard.
 const API =
   (import.meta.env.VITE_DREAMDEX_API as string | undefined) ||
   "https://stg.api.dreamdex.io";
@@ -19,7 +20,6 @@ type Row = {
   symbol: string;
   price: number;
   change: number | null;
-  volume: number;
   idle: boolean;
 };
 
@@ -46,12 +46,11 @@ async function loadRows(signal: AbortSignal): Promise<Row[]> {
           symbol: m.symbol,
           price: close,
           change: open > 0 && close > 0 ? ((close - open) / open) * 100 : null,
-          volume: Number(k?.volume ?? 0),
           idle: !k || close === 0,
         };
       } catch (e) {
         if ((e as Error).name === "AbortError") throw e;
-        return { symbol: m.symbol, price: 0, change: null, volume: 0, idle: true };
+        return { symbol: m.symbol, price: 0, change: null, idle: true };
       }
     })
   );
@@ -64,34 +63,37 @@ function fmtPrice(n: number): string {
 }
 
 const CSS = `
-.mp{position:fixed;right:16px;bottom:16px;z-index:20;width:min(300px,calc(100vw - 32px));
-  color:#fff;font:500 13px/1.4 inherit;border-radius:20px;overflow:hidden;
-  background:rgba(14,32,18,.42);border:1px solid rgba(255,255,255,.26);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  box-shadow:0 10px 30px rgba(0,0,0,.22)}
-.mp-head{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;width:100%;
-  padding:12px 16px;cursor:pointer;font-weight:600;letter-spacing:.02em}
-.mp-head:focus-visible{outline:2px solid #fff;outline-offset:-2px}
-.mp-dot{width:8px;height:8px;border-radius:50%;background:#7dffa0;box-shadow:0 0 8px #7dffa0}
-.mp-toggle{margin-left:auto;opacity:.7;font-weight:500}
-.mp-body{padding:2px 16px 14px}
-.mp-row{display:flex;align-items:baseline;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,.14)}
-.mp-sym{flex:1;font-weight:600}
-.mp-price{font-variant-numeric:tabular-nums}
-.mp-chg{min-width:58px;text-align:right;font-variant-numeric:tabular-nums}
+.mp{position:fixed;right:16px;bottom:16px;z-index:30;color:#fff;font-family:inherit;font-size:13px;line-height:1.4}
+.mp-btn{all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px;
+  height:40px;min-width:40px;padding:0 11px;border-radius:20px;cursor:pointer;font-weight:500;
+  background:#173404;border:1px solid rgba(255,255,255,.3);color:#fff}
+.mp-btn:focus-visible,.mp-x:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.mp-lbl{display:none}
+.mp-pop{position:absolute;right:0;bottom:48px;width:min(300px,calc(100vw - 32px));box-sizing:border-box;
+  padding:10px 16px 12px;border-radius:16px;background:#173404;border:1px solid rgba(255,255,255,.3)}
+.mp-top{display:flex;align-items:center;gap:8px;padding-bottom:8px;font-weight:500}
+.mp-dot{width:8px;height:8px;border-radius:50%;background:#7dffa0}
+.mp-x{all:unset;margin-left:auto;cursor:pointer;opacity:.75;padding:2px 6px}
+.mp-row{display:flex;align-items:baseline;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,.16)}
+.mp-sym{flex:1;font-weight:500}
+.mp-price,.mp-chg{font-variant-numeric:tabular-nums}
+.mp-chg{min-width:58px;text-align:right}
 .mp-up{color:#8dffae}
 .mp-down{color:#ffb0a8}
 .mp-flat{opacity:.65}
 .mp-note{margin:6px 0;opacity:.8}
-.mp-src{margin:10px 0 0;font-size:11px;opacity:.6}
+.mp-src{margin:8px 0 0;font-size:11px;opacity:.65}
+@media (min-width:900px){.mp-lbl{display:inline}.mp-btn{padding:0 14px}}
 `;
 
 function MarketPulse() {
+  const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState(false);
-  const [open, setOpen] = useState(true);
+  const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!open) return;
     let alive = true;
     const ctrl = new AbortController();
     const run = async () => {
@@ -112,18 +114,36 @@ function MarketPulse() {
       ctrl.abort();
       window.clearInterval(id);
     };
-  }, []);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onDown = (e: PointerEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [open]);
 
   return (
-    <aside className="mp" aria-label="dreamDEX markets">
+    <div className="mp" ref={box}>
       <style>{CSS}</style>
-      <button className="mp-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="mp-dot" />
-        <span>dreamDEX markets</span>
-        <span className="mp-toggle">{open ? "Hide" : "Show"}</span>
-      </button>
       {open && (
-        <div className="mp-body">
+        <div className="mp-pop" role="dialog" aria-label="dreamDEX markets">
+          <div className="mp-top">
+            <span className="mp-dot" />
+            <span>dreamDEX markets</span>
+            <button className="mp-x" onClick={() => setOpen(false)} aria-label="Close markets">
+              Close
+            </button>
+          </div>
           {!rows && error && (
             <p className="mp-note">The dreamDEX API is not reachable right now.</p>
           )}
@@ -152,11 +172,23 @@ function MarketPulse() {
           <p className="mp-src">Live from the dreamDEX HTTP API, 24 hour change</p>
         </div>
       )}
-    </aside>
+      <button
+        className="mp-btn"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label="Toggle dreamDEX markets"
+      >
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="2,15 7,9 11,12 18,4" />
+          <polyline points="13,4 18,4 18,9" />
+        </svg>
+        <span className="mp-lbl">Markets</span>
+      </button>
+    </div>
   );
 }
 
-// Mount the panel without touching App.tsx.
+// Mount the button after the app, without touching App.tsx.
 if (!document.getElementById("market-pulse-root")) {
   const host = document.createElement("div");
   host.id = "market-pulse-root";
