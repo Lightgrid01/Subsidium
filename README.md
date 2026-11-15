@@ -115,8 +115,8 @@ Open http://localhost:5173. You can also paste the contract address into the Con
 
 Filled in after the Hideki deployment.
 
-* Subsidium contract: PENDING
-* Deploy transaction: PENDING
+* Subsidium contract: 0xC6d270a36f6DcC8cB3a38DBb91673af9CB9B1d33
+* Deploy transaction: 0x1bad7db76197adff413f504ddb2fbdfd4875935fb5b9e32b078c76eb8cbbe39e
 * Arm transaction: PENDING
 * First scheduled step: PENDING
 * First live order from a cut: PENDING
@@ -200,3 +200,7 @@ Built by Lightgrid01, on X as @w3rgmi.
 ## License
 
 MIT
+
+## Known limitation
+
+The dreamDEX app rejects contract addresses in Link a bot, so the contract cannot place orders itself. Orders must come from an externally owned bot address. See feedback/link-a-bot-rejects-contracts.md. An executor wallet that follows the switch is in progress.
